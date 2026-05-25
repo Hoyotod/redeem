@@ -1,0 +1,75 @@
+name: Auto Redeem Codes
+
+on:
+    schedule:
+        - cron: '0 18 * * *'
+    workflow_dispatch:
+        inputs:
+            auto:
+                description: 'Auto Fetch Mode (-a)'
+                required: true
+                default: true
+                type: boolean
+            force:
+                description: 'Force Redeem (-f)'
+                required: true
+                default: false
+                type: boolean
+            manual_args:
+                description: 'Manual Codes (Opsional)'
+                required: false
+                type: string
+
+jobs:
+    redeem-codes:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
+
+            - name: Setup uv
+              uses: astral-sh/setup-uv@v7
+              with:
+                  version: "latest"
+                  python-version: 3.13
+                  enable-cache: true
+                  activate-environment: true
+
+            - name: Install dependencies
+              run: |
+                  uv sync
+
+            - name: Run redeem script
+              env:
+                  SECRET_KEY: ${{ secrets.SECRET_KEY }}
+                  COOKIE_API_URL: ${{ secrets.COOKIE_API_URL }}
+                  DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+                  MAX_PARALLEL: ${{ vars.MAX_PARALLEL }}
+                  LOCALE: ${{ vars.LOCALE }}
+                  NO_GENSHIN: ${{ vars.NO_GENSHIN }}
+                  NO_STARRAIL: ${{ vars.NO_STARRAIL }}
+                  NO_ZZZ: ${{ vars.NO_ZZZ }}
+                  NO_HONKAI: ${{ vars.NO_HONKAI }}
+                  NO_TOT: ${{ vars.NO_TOT }}
+              run: |
+                  ARGS=""
+                  if [ "${{ github.event_name }}" == "schedule" ]; then
+                    ARGS="-a"
+                    echo "📅 Scheduled Run: Auto Mode"
+                  else
+                    if [ "${{ inputs.auto }}" == "true" ]; then ARGS="$ARGS -a"; fi
+                    if [ "${{ inputs.force }}" == "true" ]; then ARGS="$ARGS -f"; fi
+                    if [ -n "${{ inputs.manual_args }}" ]; then ARGS="$ARGS ${{ inputs.manual_args }}"; fi
+                    echo "👤 Manual Run: Args = $ARGS"
+                  fi
+
+                  uv run main.py $ARGS
+
+            - name: Commit used codes history
+              uses: stefanzweifel/git-auto-commit-action@v7
+              with:
+                  commit_message: 'chore(data): update used codes history'
+                  file_pattern: 'used/*.txt'
