@@ -44,8 +44,7 @@ jobs:
 
             - name: Run redeem script
               env:
-                  SECRET_KEY: ${{ secrets.SECRET_KEY }}
-                  COOKIE_API_URL: ${{ secrets.COOKIE_API_URL }}
+                  DATABASE_URL: ${{ secrets.DATABASE_URL }}
                   DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
                   MAX_PARALLEL: ${{ vars.MAX_PARALLEL }}
                   LOCALE: ${{ vars.LOCALE }}
