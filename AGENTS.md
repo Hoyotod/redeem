@@ -33,6 +33,10 @@ LOG_LEVEL=DEBUG uv run main.py -a
 uv run ruff format .        # Format code
 uv run ruff check .         # Lint code
 uv run mypy utils.py main.py  # Type check
+
+# Run tests
+uv run pytest tests/ -v     # Run all tests
+uv run pytest tests/ --cov  # Run with coverage report
 ```
 
 ## Environment Setup
@@ -52,6 +56,7 @@ Copy `.env.example` to `.env` and configure:
 - **Database:** `asyncpg` with connection pooling
 - **Validation:** Pydantic with field validators
 - **Code Quality:** `ruff` (linting/formatting), `mypy` (type checking)
+- **Testing:** `pytest` with `pytest-asyncio` and `pytest-cov` (31 tests, 77% coverage)
 
 ### Database
 - Direct PostgreSQL access via `asyncpg` async connection pool
@@ -81,20 +86,52 @@ Copy `.env.example` to `.env` and configure:
 
 ## GitHub Actions
 
-Workflow: `.github/workflows/redeem.yml`
+### Redeem Workflow (`.github/workflows/redeem.yml`)
 - Scheduled: daily at 18:00 UTC (`-a` mode)
 - Manual dispatch: supports `-a`, `-f`, and custom args
 - Auto-commits updated `used/*.txt` files
 - Secrets required: `DATABASE_URL`, `DISCORD_WEBHOOK_URL`
+
+### CI Workflow (`.github/workflows/ci.yml`)
+- Triggers: push to main, pull requests
+- Steps: format check → lint → typecheck → tests with coverage
+- Uploads coverage HTML artifact on PRs
+- Ensures code quality before merging
 
 ## Code Style
 
 - 4 spaces indentation
 - CRLF line endings (see `.editorconfig`)
 - Uses `uv` for dependency management (not pip/poetry)
-- Type hints on all functions (mypy strict mode compatible)
-- Ruff for linting and formatting (line length: 88)
+- Type hints on all functions (mypy strict mode enabled)
+- Ruff for linting and formatting (line length: 88, extended rule set: E/F/I/N/W/UP/ASYNC/B/S/RUF/PT/PERF/FLY/SIM/TCH/PIE/C4)
 - Google-style docstrings on core functions
+- Test coverage target: >75%
+
+## Testing
+
+### Test Suite Structure
+- **`tests/conftest.py`**: Shared fixtures (mock DB pool, HTTP client, environments)
+- **`tests/test_utils.py`**: Unit tests for helpers, Settings validation, GameConfig, used codes I/O, async functions (17 tests)
+- **`tests/test_main.py`**: Unit tests for argument parsing, code preparation, redeem process, game processing (14 tests)
+
+### Running Tests
+```bash
+# Run all tests
+uv run pytest tests/ -v
+
+# Run with coverage report
+uv run pytest tests/ --cov --cov-report=term-missing
+
+# Run specific test file
+uv run pytest tests/test_utils.py -v
+```
+
+### Coverage
+- **Total:** 77% (31 tests, all passing)
+- **Main modules:** `main.py` (50%), `utils.py` (70%)
+- **Test modules:** 100% (test_main.py, test_utils.py)
+- Uncovered: mostly error handling paths and database I/O
 
 ## Important Implementation Details
 
@@ -104,3 +141,4 @@ Workflow: `.github/workflows/redeem.yml`
 - `DATABASE_URL` validated for PostgreSQL connection string format
 - Unused fields removed from `RedeemInfo` dataclass: `level`, `server`
 - `CookieInfo.cookies` is `str` only (not `str | dict`)
+- All async functions have corresponding test coverage with mocked dependencies

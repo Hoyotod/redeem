@@ -17,6 +17,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "mypy>=1.13.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=5.0.0",
     "ruff>=0.8.0",
 ]
 
@@ -34,8 +37,17 @@ select = [
     "UP",
     "ASYNC",
     "B",
+    "S",
+    "RUF",
+    "PT",
+    "PERF",
+    "FLY",
+    "SIM",
+    "TCH",
+    "PIE",
+    "C4",
 ]
-ignore = ["E501"]
+ignore = ["E501", "S101"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -43,15 +55,7 @@ indent-style = "space"
 
 [tool.mypy]
 python_version = "3.13"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
-no_implicit_optional = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-strict_equality = true
+strict = true
 
 [[tool.mypy.overrides]]
 module = "genshin.*"
@@ -64,3 +68,18 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "asyncpg.*"
 ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+    "--cov=.",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+]

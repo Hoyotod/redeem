@@ -33,7 +33,7 @@ async def redeem_process(
     code: str,
 ) -> RedeemInfo:
     async with semaphore:
-        client, err = await create_genshin_client(cookie, lang, game)
+        client, _ = await create_genshin_client(cookie, lang, game)
         if not client:
             return RedeemInfo(
                 env_name=cookie.env_name, code=code, status=RedeemStatus.COOKIE_ERROR

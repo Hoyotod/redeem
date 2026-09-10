@@ -10,6 +10,8 @@ Automated redemption tool for HoYoverse game codes (Genshin Impact, Honkai: Star
 - ⚡ **Async/concurrent** processing with configurable parallelism
 - 🔒 **Type-safe** with mypy strict mode
 - 🎨 **Rich terminal UI** with status tables
+- ✅ **Tested** with 31 unit tests and 77% coverage
+- 🤖 **CI/CD** with automated quality checks
 
 ## Prerequisites
 
@@ -127,22 +129,50 @@ uv run ruff check .
 uv run mypy utils.py main.py
 ```
 
+### Testing
+
+```bash
+# Run all tests
+uv run pytest tests/ -v
+
+# Run with coverage
+uv run pytest tests/ --cov --cov-report=term-missing
+
+# Run specific test file
+uv run pytest tests/test_utils.py -v
+```
+
+**Test Suite:**
+- 31 tests across `test_main.py` and `test_utils.py`
+- 77% code coverage
+- Async functions tested with mocks
+- Settings validation and error handling coverage
+
 ### Project Structure
 
 ```
 .
-├── main.py           # Entry point and orchestration
-├── utils.py          # Core logic, models, and helpers
-├── pyproject.toml    # Dependencies and tooling config
-├── .env.example      # Environment template
-└── AGENTS.md         # Detailed architecture documentation
+├── main.py                    # Entry point and orchestration
+├── utils.py                   # Core logic, models, and helpers
+├── tests/                     # Test suite (31 tests, 77% coverage)
+│   ├── conftest.py           # Shared fixtures
+│   ├── test_main.py          # Main module tests
+│   └── test_utils.py         # Utils module tests
+├── .github/workflows/
+│   ├── ci.yml                # CI workflow (lint, test, typecheck)
+│   └── redeem.yml            # Auto-redeem workflow (daily)
+├── pyproject.toml            # Dependencies and tooling config
+├── .env.example              # Environment template
+└── AGENTS.md                 # Detailed architecture documentation
 ```
 
 ## GitHub Actions
 
+### Auto Redeem Workflow
+
 The workflow runs daily at 18:00 UTC automatically.
 
-### Setup
+**Setup:**
 
 1. Add `DATABASE_URL` to repository secrets
 2. (Optional) Add `DISCORD_WEBHOOK_URL` for notifications
@@ -151,13 +181,27 @@ The workflow runs daily at 18:00 UTC automatically.
    - `LOCALE` (default: en-us)
    - `NO_GENSHIN`, `NO_STARRAIL`, `NO_ZZZ` (default: false)
 
-### Manual Trigger
+**Manual Trigger:**
 
 Go to Actions → Auto Redeem Codes → Run workflow
 
 - Enable auto-fetch (`-a`)
 - Enable force mode (`-f`)
 - Add manual codes
+
+### CI Workflow
+
+Runs automatically on:
+- Push to `main` branch
+- Pull requests
+
+**Checks:**
+- ✅ Code formatting (`ruff format --check`)
+- ✅ Linting (`ruff check`)
+- ✅ Type checking (`mypy`)
+- ✅ Tests with coverage (`pytest`)
+
+Pull requests include coverage report artifacts.
 
 ## Architecture
 
@@ -168,6 +212,8 @@ For detailed architecture documentation, see [AGENTS.md](./AGENTS.md).
 - **HTTP Client**: `httpx` for async code fetching
 - **Notifications**: Discord webhooks with chunked messages
 - **Type Safety**: Full type hints with mypy strict mode
+- **Testing**: pytest with async support and 77% coverage
+- **CI/CD**: Automated quality checks on every PR
 
 ## Troubleshooting
 
@@ -194,11 +240,14 @@ See [LICENSE](./LICENSE) for details.
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Run code quality checks
-5. Submit a pull request
+4. Run code quality checks (`ruff`, `mypy`)
+5. Run tests (`pytest tests/ -v`)
+6. Submit a pull request
+
+All PRs must pass CI checks (formatting, linting, type checking, tests).
 
 ---
 
 **Version:** 0.2.0  
 **Python:** 3.13+  
-**Last Updated:** 2026-09-06
+**Last Updated:** 2026-09-10

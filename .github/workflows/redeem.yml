@@ -51,8 +51,6 @@ jobs:
                   NO_GENSHIN: ${{ vars.NO_GENSHIN }}
                   NO_STARRAIL: ${{ vars.NO_STARRAIL }}
                   NO_ZZZ: ${{ vars.NO_ZZZ }}
-                  NO_HONKAI: ${{ vars.NO_HONKAI }}
-                  NO_TOT: ${{ vars.NO_TOT }}
               run: |
                   ARGS=""
                   if [ "${{ github.event_name }}" == "schedule" ]; then
