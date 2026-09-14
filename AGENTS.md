@@ -93,7 +93,7 @@ Copy `.env.example` to `.env` and configure:
 ## GitHub Actions
 
 ### Redeem Workflow (`.github/workflows/redeem.yml`)
-- Scheduled: daily at 18:00 UTC (`-a` mode)
+- Scheduled: every 3 hours (`-a` mode)
 - Manual dispatch: supports `-a`, `-f`, and custom args
 - Auto-commits updated `used/*.txt` files
 - Secrets required: `DATABASE_URL`, `DISCORD_WEBHOOK_URL`

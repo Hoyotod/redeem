@@ -170,7 +170,7 @@ uv run pytest tests/test_utils.py -v
 
 ### Auto Redeem Workflow
 
-The workflow runs daily at 18:00 UTC automatically.
+The workflow runs every 3 hours automatically.
 
 **Setup:**
 
