@@ -34,6 +34,11 @@ class TestParseArguments:
             assert args.sr == ["SRCODE"]
             assert args.zz == []
 
+    def test_parse_arguments_reset(self) -> None:
+        with patch("sys.argv", ["main.py", "-r"]):
+            args = parse_arguments()
+            assert args.reset is True
+
 
 class TestPrepareCodes:
     async def test_prepare_codes_manual_only(self) -> None:
@@ -219,3 +224,46 @@ class TestProcessGame:
 
             assert len(result) == 2
             assert mock_sleep.call_count >= 1
+
+
+class TestResetFlow:
+    async def test_main_with_reset_only_exits(self) -> None:
+        with (
+            patch("sys.argv", ["main.py", "-r"]),
+            patch("main.reset_used_codes") as mock_reset,
+            patch("main.prepare_codes") as mock_prepare,
+            patch("main.get_cookies_from_db") as mock_get_cookies,
+        ):
+            mock_prepare.return_value = {}
+
+            from main import main
+
+            await main()
+
+            mock_reset.assert_called_once()
+            mock_prepare.assert_called_once()
+            mock_get_cookies.assert_not_called()
+
+    async def test_main_with_reset_and_auto(self) -> None:
+        with (
+            patch("sys.argv", ["main.py", "-r", "-a"]),
+            patch("main.reset_used_codes") as mock_reset,
+            patch("main.prepare_codes") as mock_prepare,
+            patch("main.get_cookies_from_db") as mock_get_cookies,
+            patch("main.process_all_games") as mock_process,
+            patch("main.close_db_pool") as mock_close,
+        ):
+            mock_prepare.return_value = {"gi": ["CODE1", "CODE2"]}
+            mock_get_cookies.return_value = [
+                CookieInfo(env_name="ACC1_TEST", cookies="test_cookie")
+            ]
+
+            from main import main
+
+            await main()
+
+            mock_reset.assert_called_once()
+            mock_prepare.assert_called_once()
+            mock_get_cookies.assert_called_once()
+            mock_process.assert_called_once()
+            mock_close.assert_called_once()

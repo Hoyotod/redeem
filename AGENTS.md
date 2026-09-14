@@ -23,6 +23,12 @@ uv run main.py -a
 # Force redeem (ignore used history)
 uv run main.py -a -f
 
+# Clear all used codes history (exit after clear)
+uv run main.py -r
+
+# Clear history then redeem new codes
+uv run main.py -r -a
+
 # Manual codes
 uv run main.py -gi CODE1 CODE2 -sr CODE3 -zz CODE4
 

@@ -19,6 +19,7 @@ from utils import (
     get_cookies_from_db,
     get_used_codes,
     log,
+    reset_used_codes,
     send_discord_embed,
     settings,
     update_used_codes,
@@ -133,6 +134,12 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "-f", "--force", action="store_true", help="Force redeem (ignore used history)"
+    )
+    parser.add_argument(
+        "-r",
+        "--reset",
+        action="store_true",
+        help="Clear all used codes history and exit",
     )
     parser.add_argument("-gi", nargs="*", default=[], help="Genshin Impact codes")
     parser.add_argument("-sr", nargs="*", default=[], help="Star Rail codes")
@@ -270,6 +277,11 @@ async def main() -> None:
     fix_asyncio_windows_error()
 
     args = parse_arguments()
+
+    if args.reset:
+        reset_used_codes()
+        log.info("✅ All used codes history cleared.")
+
     codes_to_redeem = await prepare_codes(args)
 
     if not codes_to_redeem:

@@ -157,6 +157,57 @@ class TestUsedCodes:
         assert "CODE3\n" in content
         assert content.count("CODE") == 3
 
+    def test_reset_used_codes_all_games(self, tmp_used_dir: Path) -> None:
+        from utils import reset_used_codes
+
+        # Setup: create files with existing codes
+        (tmp_used_dir / "genshin.txt").write_text("CODE1\nCODE2\n")
+        (tmp_used_dir / "starrail.txt").write_text("SRCODE1\n")
+        (tmp_used_dir / "zzz.txt").write_text("ZZCODE1\n")
+
+        # Call reset
+        reset_used_codes()
+
+        # Assert: all files exist but are empty
+        assert (tmp_used_dir / "genshin.txt").exists()
+        assert (tmp_used_dir / "starrail.txt").exists()
+        assert (tmp_used_dir / "zzz.txt").exists()
+        assert (tmp_used_dir / "genshin.txt").read_text() == ""
+        assert (tmp_used_dir / "starrail.txt").read_text() == ""
+        assert (tmp_used_dir / "zzz.txt").read_text() == ""
+
+    def test_reset_used_codes_no_files_exist(self, tmp_path: Path) -> None:
+        from utils import reset_used_codes
+
+        # Setup: empty temp directory
+        used_dir = tmp_path / "used"
+        with (
+            patch("utils.os.makedirs") as mock_makedirs,
+            patch("builtins.open", create=True) as mock_open,
+        ):
+            mock_makedirs.return_value = None
+            mock_file = MagicMock()
+            mock_open.return_value.__enter__.return_value = mock_file
+
+            # Call reset
+            reset_used_codes()
+
+            # Assert: makedirs called
+            mock_makedirs.assert_called_once_with("used", exist_ok=True)
+            # Assert: files opened for writing
+            assert mock_open.call_count == 3
+
+    def test_reset_used_codes_handles_errors(
+        self, tmp_used_dir: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        from utils import reset_used_codes
+
+        with patch("builtins.open", side_effect=OSError("Permission denied")):
+            reset_used_codes()
+
+            # Assert: error logged
+            assert "Failed to reset used codes" in caplog.text
+
 
 class TestAsyncFunctions:
     async def test_get_active_codes_success(self) -> None:

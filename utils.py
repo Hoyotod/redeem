@@ -358,3 +358,15 @@ def update_used_codes(game_key: str, codes: list[str]) -> None:
                 f.write(f"{c}\n")
     except OSError as e:
         log.error(f"Failed to update used codes for {game_key}: {e}")
+
+
+def reset_used_codes() -> None:
+    """Clear all used codes history files."""
+    try:
+        os.makedirs("used", exist_ok=True)
+        for game in GAMES:
+            with open(f"used/{game.path}.txt", "w", encoding="utf-8") as f:
+                f.write("")
+            log.info(f"Cleared used codes for {game.name}")
+    except OSError as e:
+        log.error(f"Failed to reset used codes: {e}")
