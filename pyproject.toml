@@ -10,7 +10,7 @@ dependencies = [
     "genshin>=1.7.26",
     "httpx>=0.27.0",
     "pydantic>=2.13.4",
-    "pydantic-settings>=2.14.1",
+    "pydantic-settings>=2.14.2",
     "rich>=15.0.0",
 ]
 
