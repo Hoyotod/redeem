@@ -51,6 +51,7 @@ jobs:
                   NO_GENSHIN: ${{ vars.NO_GENSHIN }}
                   NO_STARRAIL: ${{ vars.NO_STARRAIL }}
                   NO_ZZZ: ${{ vars.NO_ZZZ }}
+                  MANUAL_ARGS: ${{ inputs.manual_args }}
               run: |
                   ARGS=""
                   if [ "${{ github.event_name }}" == "schedule" ]; then
@@ -59,10 +60,11 @@ jobs:
                   else
                     if [ "${{ inputs.auto }}" == "true" ]; then ARGS="$ARGS -a"; fi
                     if [ "${{ inputs.force }}" == "true" ]; then ARGS="$ARGS -f"; fi
-                    if [ -n "${{ inputs.manual_args }}" ]; then ARGS="$ARGS ${{ inputs.manual_args }}"; fi
+                    if [ -n "${MANUAL_ARGS}" ]; then ARGS="$ARGS ${MANUAL_ARGS}"; fi
                     echo "👤 Manual Run: Args = $ARGS"
                   fi
 
+                  # shellcheck disable=SC2086
                   uv run main.py $ARGS
 
             - name: Commit used codes history
