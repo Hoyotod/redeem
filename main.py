@@ -21,6 +21,7 @@ from utils import (
     log,
     reset_used_codes,
     send_discord_embed,
+    send_telegram_message,
     settings,
     update_used_codes,
 )
@@ -122,6 +123,21 @@ def send_chunked_webhook(
     if len(current_msg) > 4:
         current_msg += "```"
         send_discord_embed(webhook_url, title, current_msg, color)
+
+
+def send_chunked_telegram(
+    bot_token: str, chat_id: str, title: str, lines: Sequence[str]
+) -> None:
+    max_length = 4000
+    current = f"{title}\n" if title else ""
+    for line in lines:
+        if len(current) + len(line) + 1 > max_length:
+            send_telegram_message(bot_token, chat_id, current.strip())
+            current = f"{title}\n{line}\n" if title else f"{line}\n"
+        else:
+            current += line + "\n"
+    if current.strip():
+        send_telegram_message(bot_token, chat_id, current.strip())
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -230,14 +246,40 @@ async def display_and_report_results(
                 "ff0000",
             )
 
+    # Send Telegram notifications
+    if settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_CHAT_ID:
+        if success_lines:
+            send_chunked_telegram(
+                settings.TELEGRAM_BOT_TOKEN,
+                settings.TELEGRAM_CHAT_ID,
+                f"Redeem Code - {game_name}",
+                success_lines,
+            )
+        if error_lines:
+            send_chunked_telegram(
+                settings.TELEGRAM_BOT_TOKEN,
+                settings.TELEGRAM_CHAT_ID,
+                f"⚠️ Redeem Error - {game_name}",
+                error_lines,
+            )
+
 
 async def report_cookie_errors(cookie_errors: set[str]) -> None:
     """Send final report for cookie errors."""
-    if cookie_errors and settings.DISCORD_WEBHOOK_URL:
-        err_names = ", ".join(sorted(cookie_errors))
-        error_msg = [f"❌ Invalid Cookies ({len(cookie_errors)}): {err_names}"]
+    if not cookie_errors:
+        return
+    err_names = ", ".join(sorted(cookie_errors))
+    error_msg = [f"❌ Invalid Cookies ({len(cookie_errors)}): {err_names}"]
+    if settings.DISCORD_WEBHOOK_URL:
         send_chunked_webhook(
             settings.DISCORD_WEBHOOK_URL, "⚠️ Account Alert", error_msg, "ff0000"
+        )
+    if settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_CHAT_ID:
+        send_chunked_telegram(
+            settings.TELEGRAM_BOT_TOKEN,
+            settings.TELEGRAM_CHAT_ID,
+            "⚠️ Account Alert",
+            error_msg,
         )
 
 

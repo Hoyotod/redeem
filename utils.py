@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     # Webhooks
     DISCORD_WEBHOOK_URL: str | None = None
 
+    # Telegram
+    TELEGRAM_BOT_TOKEN: str | None = None
+    TELEGRAM_CHAT_ID: str | None = None
+
     # Feature Flags
     NO_GENSHIN: bool = False
     NO_STARRAIL: bool = False
@@ -249,6 +253,22 @@ def send_discord_embed(
         webhook.execute()
     except Exception as e:
         log.error(f"[DISCORD] Gagal mengirim webhook: {e}")
+
+
+def send_telegram_message(bot_token: str, chat_id: str, text: str) -> None:
+    """Send a message to a Telegram chat via Bot API."""
+    if not bot_token or not chat_id or not text:
+        return
+    try:
+        url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.post(url, json={"chat_id": chat_id, "text": text})
+            if resp.status_code != 200:
+                log.error(
+                    f"[TELEGRAM] Gagal mengirim (HTTP {resp.status_code}): {resp.text}"
+                )
+    except Exception as e:
+        log.error(f"[TELEGRAM] Gagal mengirim pesan: {e}")
 
 
 # --- Code Logic ---
