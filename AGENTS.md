@@ -4,8 +4,8 @@
 
 Python 3.13 async script that auto-redeems HoYoverse game codes (Genshin Impact, Star Rail, ZZZ) by fetching account cookies from PostgreSQL database and codes from a GitHub repo.
 
-**Entry point:** `main.py`  
-**Core logic:** `utils.py`  
+**Entry point:** `main.py`
+**Core logic:** `utils.py`
 **Version:** 0.2.0
 
 ## Commands
@@ -62,7 +62,7 @@ Copy `.env.example` to `.env` and configure:
 - **Database:** `asyncpg` with connection pooling
 - **Validation:** Pydantic with field validators
 - **Code Quality:** `ruff` (linting/formatting), `mypy` (type checking)
-- **Testing:** `pytest` with `pytest-asyncio` and `pytest-cov` (31 tests, 77% coverage)
+- **Testing:** `pytest` with `pytest-asyncio` and `pytest-cov` (37 tests, 81% coverage)
 
 ### Database
 - Direct PostgreSQL access via `asyncpg` async connection pool
@@ -84,6 +84,11 @@ Copy `.env.example` to `.env` and configure:
 - Webhook messages chunked at 1900 chars max
 - Filters out "No Game" and "Cookie Err" from success reports
 - Cookie errors aggregated and sent as single alert at end
+
+### Telegram Notifications
+- Optional; configured via `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`
+- Messages chunked at 4000 chars max (Telegram limit 4096)
+- Mirrors Discord success/error/cookie-alert reports
 
 ### Error Handling
 - Specific exception types (`asyncpg.PostgresError`, `httpx.HTTPError`, `OSError`)
@@ -134,8 +139,8 @@ uv run pytest tests/test_utils.py -v
 ```
 
 ### Coverage
-- **Total:** 77% (31 tests, all passing)
-- **Main modules:** `main.py` (50%), `utils.py` (70%)
+- **Total:** 81% (37 tests, all passing)
+- **Main modules:** `main.py` (59%), `utils.py` (72%)
 - **Test modules:** 100% (test_main.py, test_utils.py)
 - Uncovered: mostly error handling paths and database I/O
 

@@ -10,7 +10,7 @@ Automated redemption tool for HoYoverse game codes (Genshin Impact, Honkai: Star
 - ⚡ **Async/concurrent** processing with configurable parallelism
 - 🔒 **Type-safe** with mypy strict mode
 - 🎨 **Rich terminal UI** with status tables
-- ✅ **Tested** with 31 unit tests and 77% coverage
+- ✅ **Tested** with 37 unit tests and 81% coverage
 - 🤖 **CI/CD** with automated quality checks
 
 ## Prerequisites
@@ -60,6 +60,8 @@ NO_ZZZ=False
 | `LOG_LEVEL` | No | INFO | Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL) |
 | `LOCALE` | No | en-us | Game client language |
 | `DISCORD_WEBHOOK_URL` | No | - | Discord webhook for notifications |
+| `TELEGRAM_BOT_TOKEN` | No | - | Telegram bot token for notifications |
+| `TELEGRAM_CHAT_ID` | No | - | Telegram chat ID for notifications |
 | `NO_GENSHIN` | No | False | Disable Genshin Impact |
 | `NO_STARRAIL` | No | False | Disable Honkai: Star Rail |
 | `NO_ZZZ` | No | False | Disable Zenless Zone Zero |
@@ -143,8 +145,8 @@ uv run pytest tests/test_utils.py -v
 ```
 
 **Test Suite:**
-- 31 tests across `test_main.py` and `test_utils.py`
-- 77% code coverage
+- 37 tests across `test_main.py` and `test_utils.py`
+- 81% code coverage
 - Async functions tested with mocks
 - Settings validation and error handling coverage
 
@@ -154,7 +156,7 @@ uv run pytest tests/test_utils.py -v
 .
 ├── main.py                    # Entry point and orchestration
 ├── utils.py                   # Core logic, models, and helpers
-├── tests/                     # Test suite (31 tests, 77% coverage)
+├── tests/                     # Test suite (37 tests, 81% coverage)
 │   ├── conftest.py           # Shared fixtures
 │   ├── test_main.py          # Main module tests
 │   └── test_utils.py         # Utils module tests
@@ -212,7 +214,7 @@ For detailed architecture documentation, see [AGENTS.md](./AGENTS.md).
 - **HTTP Client**: `httpx` for async code fetching
 - **Notifications**: Discord webhooks with chunked messages
 - **Type Safety**: Full type hints with mypy strict mode
-- **Testing**: pytest with async support and 77% coverage
+- **Testing**: pytest with async support and 81% coverage
 - **CI/CD**: Automated quality checks on every PR
 
 ## Troubleshooting
@@ -248,6 +250,6 @@ All PRs must pass CI checks (formatting, linting, type checking, tests).
 
 ---
 
-**Version:** 0.2.0  
-**Python:** 3.13+  
+**Version:** 0.2.0
+**Python:** 3.13+
 **Last Updated:** 2026-09-10
