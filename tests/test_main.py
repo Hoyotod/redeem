@@ -2,7 +2,6 @@ import argparse
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import genshin
-import pytest
 
 from main import (
     parse_arguments,

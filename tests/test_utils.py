@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -6,14 +5,12 @@ import pytest
 from pydantic import ValidationError
 
 from utils import (
-    GAMES,
     GameConfig,
     RedeemStatus,
     Settings,
     censor_uid,
     check_lang,
     format_name,
-    get_active_games,
     get_game_by_key,
     get_used_codes,
     update_used_codes,
@@ -180,7 +177,6 @@ class TestUsedCodes:
         from utils import reset_used_codes
 
         # Setup: empty temp directory
-        used_dir = tmp_path / "used"
         with (
             patch("utils.os.makedirs") as mock_makedirs,
             patch("builtins.open", create=True) as mock_open,

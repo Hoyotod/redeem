@@ -1,8 +1,10 @@
 import os
-from collections.abc import AsyncGenerator, Generator
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
+
+# Ensure Settings can be instantiated during collection even without a .env file.
+os.environ.setdefault("DATABASE_URL", "postgresql://user:pass@localhost:5432/testdb")
 
 import asyncpg
 import httpx
