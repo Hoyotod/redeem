@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 import sys
 from dataclasses import dataclass
 from enum import Enum
@@ -97,10 +96,21 @@ class RedeemStatus(str, Enum):  # noqa: UP042
         return self.value
 
 
+# Results that must never be retried for the same game account.
+# COOLDOWN / FAILED / UNKNOWN_ERROR are intentionally absent: they are
+# temporary and should be attempted again on the next run.
+TERMINAL_STATUS_MAP: dict[RedeemStatus, str] = {
+    RedeemStatus.SUCCESS: "success",
+    RedeemStatus.CLAIMED: "claimed",
+    RedeemStatus.INVALID: "invalid",
+}
+
+
 @dataclass
 class CookieInfo:
     env_name: str = ""
     cookies: str = ""
+    account_id: str = ""
 
     def get(self) -> str:
         return self.cookies
@@ -114,6 +124,8 @@ class RedeemInfo:
     status: RedeemStatus = RedeemStatus.FAILED
     success: bool = False
     env_name: str = "❓"
+    account_id: str = ""
+    raw_uid: str | None = None
 
 
 # --- Helper Functions ---
@@ -215,8 +227,13 @@ async def get_cookies_from_api() -> list[CookieInfo]:
             safe_name = format_name(str(name)) if name else ""
             env_name = f"ACC{idx}_{safe_name}" if safe_name else f"ACC{idx}"
 
+            account_uuid = row.get("id")
             account_id = row.get("accountId")
             cookie_token = row.get("cookieToken")
+
+            if not account_uuid:
+                log.warning(f"[COOKIE] Missing account id for akun {env_name}, skip.")
+                continue
 
             if not account_id or not cookie_token:
                 log.warning(f"[COOKIE] Data tidak lengkap untuk akun {env_name}, skip.")
@@ -234,13 +251,131 @@ async def get_cookies_from_api() -> list[CookieInfo]:
                 continue
 
             cookie_str = f"account_id_v2={account_id}; cookie_token_v2={cookie_token}"
-            cookies.append(CookieInfo(env_name=env_name, cookies=cookie_str))
+            cookies.append(
+                CookieInfo(
+                    env_name=env_name,
+                    cookies=cookie_str,
+                    account_id=str(account_uuid),
+                )
+            )
         except Exception as e:
             log.warning(f"[COOKIE] Gagal memproses row {idx}: {e}")
             continue
 
     log.info(f"[COOKIE] Berhasil memuat {len(cookies)} akun dari hoyo-api.")
     return cookies
+
+
+def _internal_headers() -> dict[str, str]:
+    return {"X-API-Key": settings.HOYO_API_KEY}
+
+
+def _internal_url(path: str) -> str:
+    return f"{settings.HOYO_API_URL.rstrip('/')}{path}"
+
+
+async def get_redemptions() -> dict[str, dict[str, set[str]]] | None:
+    """Fetch per-account redemption history from hoyo-api.
+
+    Returns:
+        Mapping of game account UUID -> game key -> redeemed/terminal codes.
+        None when the request fails, so callers can abort instead of risking
+        a duplicate redemption.
+    """
+    url = _internal_url("/api/internal/redemptions")
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url, headers=_internal_headers())
+            response.raise_for_status()
+            payload = response.json()
+    except httpx.HTTPStatusError as e:
+        log.error(f"[HISTORY] hoyo-api request failed (HTTP {e.response.status_code}).")
+        return None
+    except httpx.HTTPError as e:
+        log.error(f"[HISTORY] Could not reach hoyo-api: {type(e).__name__}")
+        return None
+    except ValueError:
+        log.error("[HISTORY] hoyo-api returned invalid JSON.")
+        return None
+
+    rows = payload.get("redemptions") if isinstance(payload, dict) else None
+    if not isinstance(rows, list):
+        log.error("[HISTORY] Unexpected hoyo-api response shape.")
+        return None
+
+    history: dict[str, dict[str, set[str]]] = {}
+    for row in rows:
+        try:
+            account_uuid = str(row["gameAccountId"])
+            game = str(row["game"])
+            code = str(row["code"])
+        except (KeyError, TypeError):
+            continue
+        history.setdefault(account_uuid, {}).setdefault(game, set()).add(code)
+
+    total = sum(len(codes) for games in history.values() for codes in games.values())
+    log.info(f"[HISTORY] Loaded {total} redemption records.")
+    return history
+
+
+async def record_redemptions(game_key: str, results: list[RedeemInfo]) -> bool:
+    """Persist terminal results for a game so they are never retried."""
+    rows = []
+    for result in results:
+        status = TERMINAL_STATUS_MAP.get(result.status)
+        if not status or not result.account_id or not result.code:
+            continue
+        rows.append(
+            {
+                "gameAccountId": result.account_id,
+                "game": game_key,
+                "code": result.code,
+                "uid": result.raw_uid,
+                "status": status,
+            }
+        )
+
+    if not rows:
+        return True
+
+    url = _internal_url("/api/internal/redemptions")
+    for start in range(0, len(rows), 500):
+        chunk = rows[start : start + 500]
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    url, headers=_internal_headers(), json={"redemptions": chunk}
+                )
+                response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            log.error(
+                f"[HISTORY] Failed to record codes (HTTP {e.response.status_code})."
+            )
+            return False
+        except httpx.HTTPError as e:
+            log.error(f"[HISTORY] Could not record codes: {type(e).__name__}")
+            return False
+
+    log.info(f"[HISTORY] Recorded {len(rows)} terminal results for {game_key}.")
+    return True
+
+
+async def reset_redemptions() -> bool:
+    """Clear all per-account redemption history."""
+    url = _internal_url("/api/internal/redemptions")
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.delete(url, headers=_internal_headers())
+            response.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        log.error(f"[HISTORY] Reset failed (HTTP {e.response.status_code}).")
+        return False
+    except httpx.HTTPError as e:
+        log.error(f"[HISTORY] Could not reset history: {type(e).__name__}")
+        return False
+
+    log.info("[HISTORY] Cleared all redemption history.")
+    return True
 
 
 async def create_genshin_client(
@@ -358,51 +493,3 @@ async def get_active_codes() -> dict[str, list[str]]:
             except Exception as e:
                 log.warning(f"[CODES] Unexpected error fetching {game.path}: {e}")
     return active
-
-
-def get_used_codes() -> dict[str, set[str]]:
-    """Load used codes from local files.
-
-    Returns:
-        Dictionary mapping game keys to set of used codes.
-    """
-    used: dict[str, set[str]] = {g.key: set() for g in GAMES}
-    for game in GAMES:
-        try:
-            if os.path.exists(f"used/{game.path}.txt"):
-                with open(f"used/{game.path}.txt", encoding="utf-8") as f:
-                    used[game.key] = set(f.read().splitlines())
-        except OSError as e:
-            log.debug(f"Could not read used codes for {game.path}: {e}")
-    return used
-
-
-def update_used_codes(game_key: str, codes: list[str]) -> None:
-    """Append newly used codes to history file.
-
-    Args:
-        game_key: Game identifier (gi, sr, zz)
-        codes: List of codes to mark as used
-    """
-    game = get_game_by_key(game_key)
-    if not game:
-        return
-    try:
-        os.makedirs("used", exist_ok=True)
-        with open(f"used/{game.path}.txt", "a", encoding="utf-8") as f:
-            for c in codes:
-                f.write(f"{c}\n")
-    except OSError as e:
-        log.error(f"Failed to update used codes for {game_key}: {e}")
-
-
-def reset_used_codes() -> None:
-    """Clear all used codes history files."""
-    try:
-        os.makedirs("used", exist_ok=True)
-        for game in GAMES:
-            with open(f"used/{game.path}.txt", "w", encoding="utf-8") as f:
-                f.write("")
-            log.info(f"Cleared used codes for {game.name}")
-    except OSError as e:
-        log.error(f"Failed to reset used codes: {e}")

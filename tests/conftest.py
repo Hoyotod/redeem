@@ -1,5 +1,4 @@
 import os
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 # Ensure Settings can be instantiated during collection even without a .env file.
@@ -14,14 +13,6 @@ import pytest
 def mock_httpx_client() -> AsyncMock:
     client = AsyncMock(spec=httpx.AsyncClient)
     return client
-
-
-@pytest.fixture
-def tmp_used_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    used_dir = tmp_path / "used"
-    used_dir.mkdir()
-    monkeypatch.chdir(tmp_path)
-    return used_dir
 
 
 @pytest.fixture

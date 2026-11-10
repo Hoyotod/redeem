@@ -6,6 +6,7 @@ import genshin
 from rich.table import Table
 
 from utils import (
+    TERMINAL_STATUS_MAP,
     CookieInfo,
     RedeemInfo,
     RedeemStatus,
@@ -16,13 +17,13 @@ from utils import (
     fix_asyncio_windows_error,
     get_active_codes,
     get_cookies_from_api,
-    get_used_codes,
+    get_redemptions,
     log,
-    reset_used_codes,
+    record_redemptions,
+    reset_redemptions,
     send_discord_embed,
     send_telegram_message,
     settings,
-    update_used_codes,
 )
 
 
@@ -37,7 +38,10 @@ async def redeem_process(
         client, _ = await create_genshin_client(cookie, lang, game)
         if not client:
             return RedeemInfo(
-                env_name=cookie.env_name, code=code, status=RedeemStatus.COOKIE_ERROR
+                env_name=cookie.env_name,
+                code=code,
+                status=RedeemStatus.COOKIE_ERROR,
+                account_id=cookie.account_id,
             )
 
         try:
@@ -49,7 +53,10 @@ async def redeem_process(
 
             if not target:
                 return RedeemInfo(
-                    env_name=display_name, code=code, status=RedeemStatus.NO_GAME
+                    env_name=display_name,
+                    code=code,
+                    status=RedeemStatus.NO_GAME,
+                    account_id=cookie.account_id,
                 )
 
             try:
@@ -71,6 +78,8 @@ async def redeem_process(
                 status=status,
                 success=(status == RedeemStatus.SUCCESS),
                 env_name=display_name,
+                account_id=cookie.account_id,
+                raw_uid=str(target.uid),
             )
 
         except Exception as e:
@@ -78,7 +87,10 @@ async def redeem_process(
             display_name = parts[1] if len(parts) > 1 else cookie.env_name
             log.debug(f"Account Error ({display_name}): {e}")
             return RedeemInfo(
-                env_name=display_name, code=code, status=RedeemStatus.UNKNOWN_ERROR
+                env_name=display_name,
+                code=code,
+                status=RedeemStatus.UNKNOWN_ERROR,
+                account_id=cookie.account_id,
             )
 
 
@@ -86,23 +98,43 @@ async def process_game(
     cookies: list[CookieInfo],
     lang: str,
     game: genshin.Game,
+    game_key: str,
     codes: list[str],
     name: str,
+    history: dict[str, dict[str, set[str]]],
 ) -> list[RedeemInfo]:
-    results = []
+    results: list[RedeemInfo] = []
     semaphore = asyncio.Semaphore(settings.MAX_PARALLEL)
 
     for code in codes:
-        tasks = [
-            redeem_process(semaphore, cookie, lang, game, code) for cookie in cookies
+        pending = [
+            cookie
+            for cookie in cookies
+            if code not in history.get(cookie.account_id, {}).get(game_key, set())
         ]
-        code_results = await asyncio.gather(*tasks)
+        if not pending:
+            log.debug(f"[{name}] {code} already terminal for all accounts, skip.")
+            continue
 
-        # Terminal tetap butuh info "No Game" untuk debugging, tapi webhook nanti filter
-        results.extend(code_results)
+        tasks = [
+            redeem_process(semaphore, cookie, lang, game, code) for cookie in pending
+        ]
+        # Terminal tetap butuh info "No Game" untuk debugging, tapi webhook filter
+        results.extend(await asyncio.gather(*tasks))
 
         if len(codes) > 1:
             await asyncio.sleep(5)
+
+    if not await record_redemptions(game_key, results):
+        log.error(f"[{name}] Failed to persist redemption history.")
+
+    # Keep the in-memory view current so duplicate codes in the same run are
+    # not attempted twice for an account.
+    for result in results:
+        if result.status in TERMINAL_STATUS_MAP and result.account_id:
+            history.setdefault(result.account_id, {}).setdefault(game_key, set()).add(
+                result.code
+            )
 
     return results
 
@@ -148,13 +180,16 @@ def parse_arguments() -> argparse.Namespace:
         "-a", "--auto", action="store_true", help="Auto-fetch codes from GitHub repo"
     )
     parser.add_argument(
-        "-f", "--force", action="store_true", help="Force redeem (ignore used history)"
+        "-f",
+        "--force",
+        action="store_true",
+        help="Force redeem (ignore per-account redemption history)",
     )
     parser.add_argument(
         "-r",
         "--reset",
         action="store_true",
-        help="Clear all used codes history and exit",
+        help="Clear per-account redemption history and exit",
     )
     parser.add_argument("-gi", nargs="*", default=[], help="Genshin Impact codes")
     parser.add_argument("-sr", nargs="*", default=[], help="Star Rail codes")
@@ -173,15 +208,8 @@ async def prepare_codes(args: argparse.Namespace) -> dict[str, list[str]]:
 
     if args.auto:
         active = await get_active_codes()
-        if args.force:
-            log.info("[FORCE] Ignoring used codes history.")
-            used: dict[str, set[str]] = {k: set() for k in active}
-        else:
-            used = get_used_codes()
-
-        for k in codes_map:
-            new_codes = set(active.get(k, [])) - used.get(k, set())
-            codes_map[k].update(new_codes)
+        for key in codes_map:
+            codes_map[key].update(active.get(key, []))
 
     return {k: list(v) for k, v in codes_map.items() if v}
 
@@ -283,7 +311,9 @@ async def report_cookie_errors(cookie_errors: set[str]) -> None:
 
 
 async def process_all_games(
-    codes_map: dict[str, list[str]], cookies: list[CookieInfo]
+    codes_map: dict[str, list[str]],
+    cookies: list[CookieInfo],
+    history: dict[str, dict[str, set[str]]],
 ) -> None:
     """Process redemption for all games with codes."""
     config = {
@@ -305,10 +335,9 @@ async def process_all_games(
             continue
 
         log.info(f"[{name}] Processing {len(codes)} Codes...")
-        res = await process_game(cookies, lang, game, codes, name)
+        res = await process_game(cookies, lang, game, key, codes, name, history)
 
         await display_and_report_results(res, name, global_cookie_errors)
-        update_used_codes(key, codes)
 
     await report_cookie_errors(global_cookie_errors)
 
@@ -320,8 +349,10 @@ async def main() -> None:
     args = parse_arguments()
 
     if args.reset:
-        reset_used_codes()
-        log.info("✅ All used codes history cleared.")
+        if not await reset_redemptions():
+            log.error("Failed to clear redemption history.")
+            return
+        log.info("All redemption history cleared.")
 
     codes_to_redeem = await prepare_codes(args)
 
@@ -334,7 +365,19 @@ async def main() -> None:
         log.error("No cookies found.")
         return
 
-    await process_all_games(codes_to_redeem, cookies)
+    history: dict[str, dict[str, set[str]]] = {}
+    if args.force:
+        log.info("[FORCE] Ignoring redemption history for this run.")
+    else:
+        loaded = await get_redemptions()
+        if loaded is None:
+            log.error(
+                "Could not load redemption history; aborting to avoid duplicates."
+            )
+            return
+        history = loaded
+
+    await process_all_games(codes_to_redeem, cookies, history)
 
 
 if __name__ == "__main__":

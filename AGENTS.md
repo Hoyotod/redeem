@@ -20,10 +20,10 @@ uv sync --extra dev
 # Run with auto-fetch from https://github.com/Hoyotod/code
 uv run main.py -a
 
-# Force redeem (ignore used history)
+# Force redeem (ignore per-account redemption history)
 uv run main.py -a -f
 
-# Clear all used codes history (exit after clear)
+# Clear all per-account redemption history (exit after clear)
 uv run main.py -r
 
 # Clear history then redeem new codes
@@ -63,12 +63,12 @@ Copy `.env.example` to `.env` and configure:
 - **Account Source:** hoyo-api (`GET /api/internal/accounts` with `X-API-Key`)
 - **Validation:** Pydantic with field validators
 - **Code Quality:** `ruff` (linting/formatting), `mypy` (type checking)
-- **Testing:** `pytest` with `pytest-asyncio` and `pytest-cov` (58 tests, 84% coverage)
+- **Testing:** `pytest` with `pytest-asyncio` and `pytest-cov` (66 tests, 85% coverage)
 
 ### Account Source
 - Accounts fetched from `GET {HOYO_API_URL}/api/internal/accounts` using `httpx.AsyncClient`
 - Auth: `X-API-Key: HOYO_API_KEY` (must match hoyo-api's `SERVICE_API_KEY` secret)
-- **Response fields:** `name`, `accountId`, `cookieToken` (plaintext, decrypted by the API)
+- **Response fields:** `id` (game account UUID), `name`, `accountId`, `cookieToken` (plaintext, decrypted by the API)
 - Cookies formatted as: `account_id_v2={accountId}; cookie_token_v2={cookieToken}` (v2 tokens)
 - Tokens are validated against RFC 6265 cookie-value rules (printable ASCII except `;`, `,`, whitespace, `"` and `\`); invalid/incomplete rows are skipped
 - **Note:** `genshin.complete_cookies()` deliberately not used (v1 endpoint rejects v2 tokens)
@@ -78,7 +78,14 @@ Copy `.env.example` to `.env` and configure:
 - Source: `https://raw.githubusercontent.com/Hoyotod/code/refs/heads/main/{game}/active.json`
 - **Auto-fetch available for:** Genshin Impact, Honkai: Star Rail
 - **ZZZ:** No upstream source available; use manual `-zz CODE` only
-- Used codes tracked in `used/{genshin|starrail|zzz}.txt` (auto-committed by GitHub Actions)
+
+### Redemption History
+- Stored per game account in hoyo-api's D1 table `redeemed_code`, not in this repo
+- Loaded with `GET {HOYO_API_URL}/api/internal/redemptions` (same `X-API-Key`)
+- Terminal results (`success`, `claimed`, `invalid`) are POSTed back and skipped on later runs for that account
+- Temporary results (`cooldown`, `failed`, `unknown_error`) are retried next run
+- `-f` skips loading history for the current run; `-r` deletes all history via `DELETE /api/internal/redemptions`
+- If history cannot be loaded, the run aborts to avoid duplicate redemptions
 
 ### Discord Notifications
 - Webhook messages chunked at 1900 chars max
@@ -100,7 +107,7 @@ Copy `.env.example` to `.env` and configure:
 ### Redeem Workflow (`.github/workflows/redeem.yml`)
 - Scheduled: every 3 hours (`-a` mode)
 - Manual dispatch: supports `-a`, `-f`, and custom args
-- Auto-commits updated `used/*.txt` files
+- `concurrency` group prevents overlapping runs; nothing is committed back
 - Secrets required: `HOYO_API_KEY`, `DISCORD_WEBHOOK_URL` (secret or variable: `HOYO_API_URL`)
 
 ### CI Workflow (`.github/workflows/ci.yml`)
@@ -122,10 +129,10 @@ Copy `.env.example` to `.env` and configure:
 ## Testing
 
 ### Test Suite Structure
-- **`tests/conftest.py`**: Shared fixtures (mock DB pool, HTTP client, environments)
+- **`tests/conftest.py`**: Shared fixtures (mock HTTP client, game client)
 - **`tests/test_api.py`**: Unit tests for hoyo-api account fetching (mocked `httpx`)
-- **`tests/test_utils.py`**: Unit tests for helpers, Settings validation, GameConfig, used codes I/O, async functions (17 tests)
-- **`tests/test_main.py`**: Unit tests for argument parsing, code preparation, redeem process, game processing (14 tests)
+- **`tests/test_utils.py`**: Unit tests for helpers, Settings validation, GameConfig, redemption history API (async functions)
+- **`tests/test_main.py`**: Unit tests for argument parsing, code preparation, redeem process, game processing, history load/reset flows
 
 ### Running Tests
 ```bash
@@ -140,10 +147,10 @@ uv run pytest tests/test_utils.py -v
 ```
 
 ### Coverage
-- **Total:** 84% (58 tests, all passing)
-- **Main modules:** `main.py` (52%), `utils.py` (81%)
+- **Total:** 85% (66 tests, all passing)
+- **Main modules:** `main.py` (55%), `utils.py` (83%)
 - **Test modules:** 100% (`test_api.py`, `test_main.py`, `test_utils.py`)
-- Uncovered: mostly error handling paths and notification I/O
+- Uncovered: mostly notification I/O and entrypoint orchestration paths
 
 ## Important Implementation Details
 

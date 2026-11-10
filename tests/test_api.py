@@ -64,11 +64,13 @@ class TestGetCookiesFromApi:
                     {
                         "accounts": [
                             {
+                                "id": "uuid-1",
                                 "name": "Alice",
                                 "accountId": "123456789",
                                 "cookieToken": "abc123token",
                             },
                             {
+                                "id": "uuid-2",
                                 "name": "Bob_Test",
                                 "accountId": "987654321",
                                 "cookieToken": "xyz789token",
@@ -82,6 +84,7 @@ class TestGetCookiesFromApi:
         cookies = await get_cookies_from_api()
 
         assert [c.env_name for c in cookies] == ["ACC1_ALICE", "ACC2_BOB_TEST"]
+        assert [c.account_id for c in cookies] == ["uuid-1", "uuid-2"]
         assert cookies[0].cookies == (
             "account_id_v2=123456789; cookie_token_v2=abc123token"
         )
@@ -107,13 +110,16 @@ class TestGetCookiesFromApi:
                 FakeResponse(
                     {
                         "accounts": [
-                            {"name": "NoToken", "accountId": "1"},
+                            {"name": "NoId", "accountId": "1", "cookieToken": "token"},
+                            {"id": "uuid-1", "name": "NoToken", "accountId": "1"},
                             {
+                                "id": "uuid-2",
                                 "name": "Injection",
                                 "accountId": "1; DROP TABLE",
                                 "cookieToken": "token",
                             },
                             {
+                                "id": "uuid-3",
                                 "name": "Good",
                                 "accountId": "123",
                                 "cookieToken": "456",
@@ -126,7 +132,7 @@ class TestGetCookiesFromApi:
 
         cookies = await get_cookies_from_api()
 
-        assert [c.env_name for c in cookies] == ["ACC3_GOOD"]
+        assert [c.env_name for c in cookies] == ["ACC4_GOOD"]
 
     async def test_accepts_base64_and_encoded_tokens(
         self, monkeypatch: pytest.MonkeyPatch
@@ -139,6 +145,7 @@ class TestGetCookiesFromApi:
                     {
                         "accounts": [
                             {
+                                "id": "uuid-4",
                                 "name": "Fadel",
                                 "accountId": "123456789",
                                 "cookieToken": "abc+/=def%2Fghi-jkl_mno",

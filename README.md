@@ -10,7 +10,7 @@ Automated redemption tool for HoYoverse game codes (Genshin Impact, Honkai: Star
 - ⚡ **Async/concurrent** processing with configurable parallelism
 - 🔒 **Type-safe** with mypy strict mode
 - 🎨 **Rich terminal UI** with status tables
-- ✅ **Tested** with 37 unit tests and 81% coverage
+- ✅ **Tested** with 66 unit tests and 85% coverage
 - 🤖 **CI/CD** with automated quality checks
 
 ## Prerequisites
@@ -74,8 +74,14 @@ NO_ZZZ=False
 # Auto-fetch and redeem codes from GitHub
 uv run main.py -a
 
-# Force redeem (ignore used history)
+# Force redeem (ignore per-account redemption history)
 uv run main.py -a -f
+
+# Clear per-account redemption history and exit
+uv run main.py -r
+
+# Clear history, then redeem everything again
+uv run main.py -r -a
 
 # Manual codes for specific games
 uv run main.py -gi CODE1 CODE2
@@ -89,9 +95,25 @@ uv run main.py -a -gi EXTRA_CODE
 ## Account Source
 
 Accounts are read from `GET {HOYO_API_URL}/api/internal/accounts` on hoyo-api
-(authenticated with `X-API-Key: HOYO_API_KEY`). Each row provides `name`,
-`accountId`, and a plaintext `cookieToken`, which is formatted as
-`account_id_v2={accountId}; cookie_token_v2={cookieToken}`.
+(authenticated with `X-API-Key: HOYO_API_KEY`). Each row provides `id` (game
+account UUID), `name`, `accountId`, and a plaintext `cookieToken`, which is
+formatted as `account_id_v2={accountId}; cookie_token_v2={cookieToken}`.
+
+## Redemption History
+
+History is stored per game account in hoyo-api's D1 database (`redeemed_code`
+table), not in this repository. The script reads it from
+`GET /api/internal/redemptions`, skips codes that already reached a terminal
+state for that account, and records new terminal results via
+`POST /api/internal/redemptions`.
+
+- **Terminal (never retried):** `success`, `claimed`, `invalid`
+- **Retried on the next run:** `cooldown`, `failed`, `unknown_error`
+
+Because history is per account, two accounts can each attempt the same code.
+`-f` ignores history for the current run only, while `-r` deletes all history
+(and then likely wants `-a` to redeem everything again). If history cannot be
+loaded, the run aborts instead of risking duplicate redemptions.
 
 ## Status Codes
 
@@ -138,8 +160,8 @@ uv run pytest tests/test_utils.py -v
 ```
 
 **Test Suite:**
-- 37 tests across `test_main.py` and `test_utils.py`
-- 81% code coverage
+- 66 tests across `test_api.py`, `test_main.py`, and `test_utils.py`
+- 85% code coverage
 - Async functions tested with mocks
 - Settings validation and error handling coverage
 
@@ -149,13 +171,14 @@ uv run pytest tests/test_utils.py -v
 .
 ├── main.py                    # Entry point and orchestration
 ├── utils.py                   # Core logic, models, and helpers
-├── tests/                     # Test suite (37 tests, 81% coverage)
+├── tests/                     # Test suite (66 tests, 85% coverage)
 │   ├── conftest.py           # Shared fixtures
+│   ├── test_api.py           # hoyo-api account fetching tests
 │   ├── test_main.py          # Main module tests
 │   └── test_utils.py         # Utils module tests
 ├── .github/workflows/
 │   ├── ci.yml                # CI workflow (lint, test, typecheck)
-│   └── redeem.yml            # Auto-redeem workflow (daily)
+│   └── redeem.yml            # Auto-redeem workflow (every 3 hours)
 ├── pyproject.toml            # Dependencies and tooling config
 ├── .env.example              # Environment template
 └── AGENTS.md                 # Detailed architecture documentation
@@ -165,7 +188,10 @@ uv run pytest tests/test_utils.py -v
 
 ### Auto Redeem Workflow
 
-The workflow runs every 3 hours automatically.
+The workflow runs every 3 hours automatically. Runs are serialized with a
+`concurrency` group so two jobs never redeem the same codes at the same time.
+Redemption history lives in hoyo-api's D1 database, so no data is committed
+back to the repository.
 
 **Setup:**
 
@@ -204,10 +230,11 @@ For detailed architecture documentation, see [AGENTS.md](./AGENTS.md).
 
 **Key Components:**
 - **Account Source**: hoyo-api (`GET /api/internal/accounts`)
+- **Redemption History**: hoyo-api D1 (`GET/POST/DELETE /api/internal/redemptions`)
 - **HTTP Client**: `httpx` for async code fetching and account lookup
 - **Notifications**: Discord webhooks with chunked messages
 - **Type Safety**: Full type hints with mypy strict mode
-- **Testing**: pytest with async support and 81% coverage
+- **Testing**: pytest with async support and 85% coverage
 - **CI/CD**: Automated quality checks on every PR
 
 ## Troubleshooting

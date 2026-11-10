@@ -1,19 +1,21 @@
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from pydantic import ValidationError
 
 from utils import (
     GameConfig,
+    RedeemInfo,
     RedeemStatus,
     Settings,
     censor_uid,
     check_lang,
     format_name,
     get_game_by_key,
-    get_used_codes,
-    update_used_codes,
+    get_redemptions,
+    record_redemptions,
+    reset_redemptions,
 )
 
 
@@ -128,81 +130,140 @@ class TestGameConfig:
         assert "sr" in keys or "zz" in keys
 
 
-class TestUsedCodes:
-    def test_get_used_codes_empty(self, tmp_used_dir: Path) -> None:
-        result = get_used_codes()
-        assert all(len(codes) == 0 for codes in result.values())
+class TestRedemptionHistory:
+    async def test_get_redemptions_groups_by_account_and_game(self) -> None:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "redemptions": [
+                {"gameAccountId": "acc-1", "game": "gi", "code": "CODE1"},
+                {"gameAccountId": "acc-1", "game": "gi", "code": "CODE2"},
+                {"gameAccountId": "acc-1", "game": "sr", "code": "SR1"},
+                {"gameAccountId": "acc-2", "game": "gi", "code": "CODE1"},
+                {"gameAccountId": "acc-2", "game": "gi", "code": "CODE1"},
+            ]
+        }
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
 
-    def test_get_used_codes_existing(self, tmp_used_dir: Path) -> None:
-        (tmp_used_dir / "genshin.txt").write_text("CODE1\nCODE2\nCODE1\n")
-        (tmp_used_dir / "starrail.txt").write_text("SRCODE1\n")
+        with patch("utils.httpx.AsyncClient") as mock_client_cls:
+            mock_client_cls.return_value.__aenter__.return_value = mock_client
 
-        result = get_used_codes()
-        assert result["gi"] == {"CODE1", "CODE2"}
-        assert result["sr"] == {"SRCODE1"}
-        assert result["zz"] == set()
+            result = await get_redemptions()
 
-    def test_update_used_codes(self, tmp_used_dir: Path) -> None:
-        update_used_codes("gi", ["CODE1", "CODE2"])
-        assert (tmp_used_dir / "genshin.txt").exists()
-        content = (tmp_used_dir / "genshin.txt").read_text()
-        assert "CODE1\n" in content
-        assert "CODE2\n" in content
+        assert result is not None
+        assert result["acc-1"]["gi"] == {"CODE1", "CODE2"}
+        assert result["acc-1"]["sr"] == {"SR1"}
+        assert result["acc-2"]["gi"] == {"CODE1"}
 
-        update_used_codes("gi", ["CODE3"])
-        content = (tmp_used_dir / "genshin.txt").read_text()
-        assert "CODE3\n" in content
-        assert content.count("CODE") == 3
+    async def test_get_redemptions_returns_none_on_http_error(self) -> None:
+        mock_client = AsyncMock()
+        mock_client.get.side_effect = httpx.HTTPError("Network error")
 
-    def test_reset_used_codes_all_games(self, tmp_used_dir: Path) -> None:
-        from utils import reset_used_codes
+        with patch("utils.httpx.AsyncClient") as mock_client_cls:
+            mock_client_cls.return_value.__aenter__.return_value = mock_client
 
-        # Setup: create files with existing codes
-        (tmp_used_dir / "genshin.txt").write_text("CODE1\nCODE2\n")
-        (tmp_used_dir / "starrail.txt").write_text("SRCODE1\n")
-        (tmp_used_dir / "zzz.txt").write_text("ZZCODE1\n")
+            result = await get_redemptions()
 
-        # Call reset
-        reset_used_codes()
+        assert result is None
 
-        # Assert: all files exist but are empty
-        assert (tmp_used_dir / "genshin.txt").exists()
-        assert (tmp_used_dir / "starrail.txt").exists()
-        assert (tmp_used_dir / "zzz.txt").exists()
-        assert (tmp_used_dir / "genshin.txt").read_text() == ""
-        assert (tmp_used_dir / "starrail.txt").read_text() == ""
-        assert (tmp_used_dir / "zzz.txt").read_text() == ""
+    async def test_get_redemptions_returns_none_on_bad_payload(self) -> None:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"unexpected": []}
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
 
-    def test_reset_used_codes_no_files_exist(self, tmp_path: Path) -> None:
-        from utils import reset_used_codes
+        with patch("utils.httpx.AsyncClient") as mock_client_cls:
+            mock_client_cls.return_value.__aenter__.return_value = mock_client
 
-        # Setup: empty temp directory
-        with (
-            patch("utils.os.makedirs") as mock_makedirs,
-            patch("builtins.open", create=True) as mock_open,
-        ):
-            mock_makedirs.return_value = None
-            mock_file = MagicMock()
-            mock_open.return_value.__enter__.return_value = mock_file
+            result = await get_redemptions()
 
-            # Call reset
-            reset_used_codes()
+        assert result is None
 
-            # Assert: makedirs called
-            mock_makedirs.assert_called_once_with("used", exist_ok=True)
-            # Assert: files opened for writing
-            assert mock_open.call_count == 3
+    async def test_record_redemptions_only_terminal_results(self) -> None:
+        mock_response = MagicMock()
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
 
-    def test_reset_used_codes_handles_errors(
-        self, tmp_used_dir: Path, caplog: pytest.LogCaptureFixture
+        results = [
+            RedeemInfo(
+                code="CODE1",
+                status=RedeemStatus.SUCCESS,
+                account_id="acc-1",
+                raw_uid="123456789",
+            ),
+            RedeemInfo(code="CODE2", status=RedeemStatus.COOLDOWN, account_id="acc-1"),
+            RedeemInfo(code="CODE3", status=RedeemStatus.INVALID, account_id="acc-2"),
+            RedeemInfo(code="CODE4", status=RedeemStatus.CLAIMED, account_id="acc-2"),
+        ]
+
+        with patch("utils.httpx.AsyncClient") as mock_client_cls:
+            mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+            assert await record_redemptions("gi", results) is True
+
+        payload = mock_client.post.call_args.kwargs["json"]
+        assert len(payload["redemptions"]) == 3
+        by_code = {row["code"]: row for row in payload["redemptions"]}
+        assert by_code["CODE1"]["status"] == "success"
+        assert by_code["CODE3"]["status"] == "invalid"
+        assert by_code["CODE4"]["status"] == "claimed"
+        assert "CODE2" not in by_code
+
+    async def test_record_redemptions_skips_request_without_terminal_results(
+        self,
     ) -> None:
-        from utils import reset_used_codes
+        mock_client = AsyncMock()
 
-        with patch("builtins.open", side_effect=OSError("Permission denied")):
-            reset_used_codes()
+        with patch("utils.httpx.AsyncClient") as mock_client_cls:
+            mock_client_cls.return_value.__aenter__.return_value = mock_client
 
-            # Assert: error logged
-            assert "Failed to reset used codes" in caplog.text
+            result = await record_redemptions(
+                "gi", [RedeemInfo(code="CODE1", status=RedeemStatus.FAILED)]
+            )
+
+        assert result is True
+        mock_client.post.assert_not_called()
+
+    async def test_record_redemptions_returns_false_on_http_error(self) -> None:
+        mock_client = AsyncMock()
+        mock_client.post.side_effect = httpx.HTTPError("Network error")
+
+        with patch("utils.httpx.AsyncClient") as mock_client_cls:
+            mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+            result = await record_redemptions(
+                "gi",
+                [
+                    RedeemInfo(
+                        code="CODE1",
+                        status=RedeemStatus.SUCCESS,
+                        account_id="acc-1",
+                    )
+                ],
+            )
+
+        assert result is False
+
+    async def test_reset_redemptions_success(self) -> None:
+        mock_response = MagicMock()
+        mock_client = AsyncMock()
+        mock_client.delete = AsyncMock(return_value=mock_response)
+
+        with patch("utils.httpx.AsyncClient") as mock_client_cls:
+            mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+            assert await reset_redemptions() is True
+
+        mock_client.delete.assert_awaited_once()
+
+    async def test_reset_redemptions_returns_false_on_http_error(self) -> None:
+        mock_client = AsyncMock()
+        mock_client.delete.side_effect = httpx.HTTPError("Network error")
+
+        with patch("utils.httpx.AsyncClient") as mock_client_cls:
+            mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+            assert await reset_redemptions() is False
 
 
 class TestAsyncFunctions:

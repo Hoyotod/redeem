@@ -23,8 +23,9 @@ on:
 jobs:
     redeem-codes:
         runs-on: ubuntu-latest
-        permissions:
-            contents: write
+        concurrency:
+            group: redeem-codes
+            cancel-in-progress: false
 
         steps:
             - name: Checkout repository
@@ -70,9 +71,3 @@ jobs:
 
                   # shellcheck disable=SC2086
                   uv run main.py $ARGS
-
-            - name: Commit used codes history
-              uses: stefanzweifel/git-auto-commit-action@v7
-              with:
-                  commit_message: 'chore(data): update used codes history'
-                  file_pattern: 'used/*.txt'
