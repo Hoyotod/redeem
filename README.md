@@ -228,7 +228,7 @@ For detailed architecture documentation, see [AGENTS.md](./AGENTS.md).
 
 ## License
 
-See [LICENSE](./LICENSE) for details.
+MIT — see [LICENSE](LICENSE).
 
 ## Contributing
 
