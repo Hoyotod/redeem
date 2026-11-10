@@ -44,7 +44,7 @@ jobs:
 
             - name: Run redeem script
               env:
-                  HOYO_API_URL: "${{ vars.HOYO_API_URL || 'https://hoyo-api.haiueom.workers.dev' }}"
+                  HOYO_API_URL: "${{ secrets.HOYO_API_URL || vars.HOYO_API_URL || 'https://hoyo-api.haiueom.workers.dev' }}"
                   HOYO_API_KEY: ${{ secrets.HOYO_API_KEY }}
                   DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
                   TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

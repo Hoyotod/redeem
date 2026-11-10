@@ -101,7 +101,7 @@ Copy `.env.example` to `.env` and configure:
 - Scheduled: every 3 hours (`-a` mode)
 - Manual dispatch: supports `-a`, `-f`, and custom args
 - Auto-commits updated `used/*.txt` files
-- Secrets required: `HOYO_API_KEY`, `DISCORD_WEBHOOK_URL` (variable: `HOYO_API_URL`)
+- Secrets required: `HOYO_API_KEY`, `DISCORD_WEBHOOK_URL` (secret or variable: `HOYO_API_URL`)
 
 ### CI Workflow (`.github/workflows/ci.yml`)
 - Triggers: push to main, pull requests

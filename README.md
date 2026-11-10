@@ -169,7 +169,7 @@ The workflow runs every 3 hours automatically.
 
 **Setup:**
 
-1. Add `HOYO_API_KEY` to repository secrets and `HOYO_API_URL` to repository variables
+1. Add `HOYO_API_KEY` and `HOYO_API_URL` to repository secrets (URL may also be a repository variable)
 2. (Optional) Add `DISCORD_WEBHOOK_URL` for notifications
 3. Configure repository variables:
    - `MAX_PARALLEL` (default: 5)
