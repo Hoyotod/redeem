@@ -11,12 +11,11 @@ from utils import (
     RedeemStatus,
     censor_uid,
     check_lang,
-    close_db_pool,
     console,
     create_genshin_client,
     fix_asyncio_windows_error,
     get_active_codes,
-    get_cookies_from_db,
+    get_cookies_from_api,
     get_used_codes,
     log,
     reset_used_codes,
@@ -330,15 +329,12 @@ async def main() -> None:
         log.info("No new codes to redeem.")
         return
 
-    cookies = await get_cookies_from_db()
+    cookies = await get_cookies_from_api()
     if not cookies:
         log.error("No cookies found.")
         return
 
-    try:
-        await process_all_games(codes_to_redeem, cookies)
-    finally:
-        await close_db_pool()
+    await process_all_games(codes_to_redeem, cookies)
 
 
 if __name__ == "__main__":

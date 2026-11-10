@@ -44,7 +44,8 @@ jobs:
 
             - name: Run redeem script
               env:
-                  DATABASE_URL: ${{ secrets.DATABASE_URL }}
+                  HOYO_API_URL: ${{ vars.HOYO_API_URL }}
+                  HOYO_API_KEY: ${{ secrets.HOYO_API_KEY }}
                   DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
                   MAX_PARALLEL: ${{ vars.MAX_PARALLEL }}
                   LOCALE: ${{ vars.LOCALE }}

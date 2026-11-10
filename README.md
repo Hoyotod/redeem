@@ -5,7 +5,7 @@ Automated redemption tool for HoYoverse game codes (Genshin Impact, Honkai: Star
 ## Features
 
 - 🔄 **Auto-fetch codes** from GitHub repository (Genshin Impact & Star Rail)
-- 🗄️ **PostgreSQL database** integration for account management
+- 🗄️ **hoyo-api** integration for account management
 - 🔔 **Discord webhook** notifications for redemption results
 - ⚡ **Async/concurrent** processing with configurable parallelism
 - 🔒 **Type-safe** with mypy strict mode
@@ -16,7 +16,7 @@ Automated redemption tool for HoYoverse game codes (Genshin Impact, Honkai: Star
 ## Prerequisites
 
 - Python 3.13+
-- PostgreSQL database
+- A running [hoyo-api](https://github.com/hoyotod/hoyo-api) instance with game accounts stored
 - [uv](https://github.com/astral-sh/uv) package manager
 
 ## Quick Start
@@ -37,7 +37,8 @@ Create a `.env` file based on `.env.example`:
 
 ```env
 # Required
-DATABASE_URL=postgresql://user:password@host:5432/dbname
+HOYO_API_URL=https://hoyo-api.haiueom.workers.dev
+HOYO_API_KEY=your-service-api-key
 
 # Optional
 MAX_PARALLEL=5
@@ -55,7 +56,8 @@ NO_ZZZ=False
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `DATABASE_URL` | ✅ Yes | - | PostgreSQL connection string |
+| `HOYO_API_URL` | ✅ Yes | - | hoyo-api base URL |
+| `HOYO_API_KEY` | ✅ Yes | - | hoyo-api `SERVICE_API_KEY` (sent as `X-API-Key`) |
 | `MAX_PARALLEL` | No | 5 | Concurrent redemptions (1-50) |
 | `LOG_LEVEL` | No | INFO | Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL) |
 | `LOCALE` | No | en-us | Game client language |
@@ -84,21 +86,12 @@ uv run main.py -zz CODE5 CODE6
 uv run main.py -a -gi EXTRA_CODE
 ```
 
-## Database Schema
+## Account Source
 
-The script expects a PostgreSQL database with the following schema:
-
-```sql
-CREATE TABLE "Account" (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  "accountId" TEXT NOT NULL UNIQUE,
-  "cookieToken" TEXT NOT NULL,
-  "userId" TEXT NOT NULL,
-  "createdAt" TIMESTAMP DEFAULT NOW(),
-  "updatedAt" TIMESTAMP DEFAULT NOW()
-);
-```
+Accounts are read from `GET {HOYO_API_URL}/api/internal/accounts` on hoyo-api
+(authenticated with `X-API-Key: HOYO_API_KEY`). Each row provides `name`,
+`accountId`, and a plaintext `cookieToken`, which is formatted as
+`account_id_v2={accountId}; cookie_token_v2={cookieToken}`.
 
 ## Status Codes
 
@@ -176,7 +169,7 @@ The workflow runs every 3 hours automatically.
 
 **Setup:**
 
-1. Add `DATABASE_URL` to repository secrets
+1. Add `HOYO_API_KEY` to repository secrets and `HOYO_API_URL` to repository variables
 2. (Optional) Add `DISCORD_WEBHOOK_URL` for notifications
 3. Configure repository variables:
    - `MAX_PARALLEL` (default: 5)
@@ -210,8 +203,8 @@ Pull requests include coverage report artifacts.
 For detailed architecture documentation, see [AGENTS.md](./AGENTS.md).
 
 **Key Components:**
-- **Database**: PostgreSQL with connection pooling (`asyncpg`)
-- **HTTP Client**: `httpx` for async code fetching
+- **Account Source**: hoyo-api (`GET /api/internal/accounts`)
+- **HTTP Client**: `httpx` for async code fetching and account lookup
 - **Notifications**: Discord webhooks with chunked messages
 - **Type Safety**: Full type hints with mypy strict mode
 - **Testing**: pytest with async support and 81% coverage
@@ -220,14 +213,14 @@ For detailed architecture documentation, see [AGENTS.md](./AGENTS.md).
 ## Troubleshooting
 
 **No cookies found:**
-- Verify `DATABASE_URL` is correct
-- Check that `Account` table has records
-- Ensure `accountId` and `cookieToken` are not null
+- Verify `HOYO_API_URL` and `HOYO_API_KEY` are correct
+- Check that hoyo-api has game accounts stored
+- Ensure `accountId` and `cookieToken` are not null in the API response
 
 **Connection errors:**
-- Verify PostgreSQL is running
-- Check network connectivity
-- Validate connection string format
+- Verify hoyo-api is running and reachable
+- Check the `SERVICE_API_KEY` secret matches `HOYO_API_KEY`
+- Validate the base URL (must start with `http://` or `https://`)
 
 **Rate limits (⏱):**
 - Wait 5 minutes between redemptions

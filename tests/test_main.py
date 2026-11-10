@@ -231,7 +231,7 @@ class TestResetFlow:
             patch("sys.argv", ["main.py", "-r"]),
             patch("main.reset_used_codes") as mock_reset,
             patch("main.prepare_codes") as mock_prepare,
-            patch("main.get_cookies_from_db") as mock_get_cookies,
+            patch("main.get_cookies_from_api") as mock_get_cookies,
         ):
             mock_prepare.return_value = {}
 
@@ -248,9 +248,8 @@ class TestResetFlow:
             patch("sys.argv", ["main.py", "-r", "-a"]),
             patch("main.reset_used_codes") as mock_reset,
             patch("main.prepare_codes") as mock_prepare,
-            patch("main.get_cookies_from_db") as mock_get_cookies,
+            patch("main.get_cookies_from_api") as mock_get_cookies,
             patch("main.process_all_games") as mock_process,
-            patch("main.close_db_pool") as mock_close,
         ):
             mock_prepare.return_value = {"gi": ["CODE1", "CODE2"]}
             mock_get_cookies.return_value = [
@@ -265,4 +264,3 @@ class TestResetFlow:
             mock_prepare.assert_called_once()
             mock_get_cookies.assert_called_once()
             mock_process.assert_called_once()
-            mock_close.assert_called_once()

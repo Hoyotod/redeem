@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Python 3.13 async script that auto-redeems HoYoverse game codes (Genshin Impact, Star Rail, ZZZ) by fetching account cookies from PostgreSQL database and codes from a GitHub repo.
+Python 3.13 async script that auto-redeems HoYoverse game codes (Genshin Impact, Star Rail, ZZZ) by fetching account cookies from hoyo-api and codes from a GitHub repo.
 
 **Entry point:** `main.py`
 **Core logic:** `utils.py`
@@ -48,7 +48,8 @@ uv run pytest tests/ --cov  # Run with coverage report
 ## Environment Setup
 
 Copy `.env.example` to `.env` and configure:
-- `DATABASE_URL` (required, PostgreSQL connection string: `postgresql://user:pass@host:5432/dbname`)
+- `HOYO_API_URL` (required, hoyo-api base URL, e.g. `https://hoyo-api.haiueom.workers.dev`)
+- `HOYO_API_KEY` (required, hoyo-api `SERVICE_API_KEY`, sent as `X-API-Key`)
 - `MAX_PARALLEL` (default: 5, controls concurrent redeem tasks, range: 1-50)
 - `LOG_LEVEL` (default: INFO, options: DEBUG, INFO, WARNING, ERROR, CRITICAL)
 - `LOCALE` (default: en-us, supported languages in `utils.py:check_lang`)
@@ -59,18 +60,17 @@ Copy `.env.example` to `.env` and configure:
 
 ### Key Technologies
 - **HTTP Client:** `httpx` (async, replaces requests)
-- **Database:** `asyncpg` with connection pooling
+- **Account Source:** hoyo-api (`GET /api/internal/accounts` with `X-API-Key`)
 - **Validation:** Pydantic with field validators
 - **Code Quality:** `ruff` (linting/formatting), `mypy` (type checking)
-- **Testing:** `pytest` with `pytest-asyncio` and `pytest-cov` (37 tests, 81% coverage)
+- **Testing:** `pytest` with `pytest-asyncio` and `pytest-cov` (43 tests, 84% coverage)
 
-### Database
-- Direct PostgreSQL access via `asyncpg` async connection pool
-- **Table:** `Account` (Prisma schema)
-- **Columns:** `name`, `"accountId"`, `"cookieToken"`
-- **Query:** `SELECT name, "accountId", "cookieToken" FROM "Account" ORDER BY name`
-- Connection pool: min 1, max 5 connections, 10s timeout
+### Account Source
+- Accounts fetched from `GET {HOYO_API_URL}/api/internal/accounts` using `httpx.AsyncClient`
+- Auth: `X-API-Key: HOYO_API_KEY` (must match hoyo-api's `SERVICE_API_KEY` secret)
+- **Response fields:** `name`, `accountId`, `cookieToken` (plaintext, decrypted by the API)
 - Cookies formatted as: `account_id_v2={accountId}; cookie_token_v2={cookieToken}` (v2 tokens)
+- Tokens are validated against `^[A-Za-z0-9_-]+$`; invalid/incomplete rows are skipped
 - **Note:** `genshin.complete_cookies()` deliberately not used (v1 endpoint rejects v2 tokens)
 
 ### Code Fetching
@@ -91,7 +91,7 @@ Copy `.env.example` to `.env` and configure:
 - Mirrors Discord success/error/cookie-alert reports
 
 ### Error Handling
-- Specific exception types (`asyncpg.PostgresError`, `httpx.HTTPError`, `OSError`)
+- Specific exception types (`httpx.HTTPError`, `OSError`)
 - Graceful degradation (empty lists on failures)
 - Structured logging with configurable log levels
 
@@ -101,7 +101,7 @@ Copy `.env.example` to `.env` and configure:
 - Scheduled: every 3 hours (`-a` mode)
 - Manual dispatch: supports `-a`, `-f`, and custom args
 - Auto-commits updated `used/*.txt` files
-- Secrets required: `DATABASE_URL`, `DISCORD_WEBHOOK_URL`
+- Secrets required: `HOYO_API_KEY`, `DISCORD_WEBHOOK_URL` (variable: `HOYO_API_URL`)
 
 ### CI Workflow (`.github/workflows/ci.yml`)
 - Triggers: push to main, pull requests
@@ -123,6 +123,7 @@ Copy `.env.example` to `.env` and configure:
 
 ### Test Suite Structure
 - **`tests/conftest.py`**: Shared fixtures (mock DB pool, HTTP client, environments)
+- **`tests/test_api.py`**: Unit tests for hoyo-api account fetching (mocked `httpx`)
 - **`tests/test_utils.py`**: Unit tests for helpers, Settings validation, GameConfig, used codes I/O, async functions (17 tests)
 - **`tests/test_main.py`**: Unit tests for argument parsing, code preparation, redeem process, game processing (14 tests)
 
@@ -139,17 +140,17 @@ uv run pytest tests/test_utils.py -v
 ```
 
 ### Coverage
-- **Total:** 81% (37 tests, all passing)
-- **Main modules:** `main.py` (59%), `utils.py` (72%)
-- **Test modules:** 100% (test_main.py, test_utils.py)
-- Uncovered: mostly error handling paths and database I/O
+- **Total:** 84% (43 tests, all passing)
+- **Main modules:** `main.py` (52%), `utils.py` (81%)
+- **Test modules:** 100% (`test_api.py`, `test_main.py`, `test_utils.py`)
+- Uncovered: mostly error handling paths and notification I/O
 
 ## Important Implementation Details
 
 - `get_active_codes()` is **async** (must be awaited in main.py)
-- Database connection pool must be closed with `close_db_pool()` before exit
+- `get_cookies_from_api()` is **async** and returns `[]` on any API failure
 - `MAX_PARALLEL` validated between 1-50 at startup
-- `DATABASE_URL` validated for PostgreSQL connection string format
+- `HOYO_API_URL` validated to start with `http://` or `https://` (trailing slash stripped)
 - Unused fields removed from `RedeemInfo` dataclass: `level`, `server`
 - `CookieInfo.cookies` is `str` only (not `str | dict`)
 - All async functions have corresponding test coverage with mocked dependencies

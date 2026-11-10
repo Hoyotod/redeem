@@ -42,22 +42,22 @@ class TestHelperFunctions:
 
 
 class TestSettings:
-    def test_settings_valid_database_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/db")
+    def test_settings_valid_hoyo_api_url(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("HOYO_API_URL", "https://hoyo-api.test/")
         settings = Settings()
-        assert settings.DATABASE_URL == "postgresql://user:pass@localhost:5432/db"
+        assert settings.HOYO_API_URL == "https://hoyo-api.test"
 
-    def test_settings_invalid_database_url(
+    def test_settings_invalid_hoyo_api_url(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("DATABASE_URL", "mysql://invalid")
+        monkeypatch.setenv("HOYO_API_URL", "mysql://invalid")
         with pytest.raises(ValidationError):
             Settings()
 
     def test_settings_max_parallel_validation(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/db")
+        monkeypatch.setenv("HOYO_API_URL", "https://hoyo-api.test")
         monkeypatch.setenv("MAX_PARALLEL", "0")
         with pytest.raises(ValidationError):
             Settings()
@@ -73,7 +73,7 @@ class TestSettings:
     def test_settings_log_level_validation(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/db")
+        monkeypatch.setenv("HOYO_API_URL", "https://hoyo-api.test")
         monkeypatch.setenv("LOG_LEVEL", "INVALID")
         with pytest.raises(ValidationError):
             Settings()
@@ -111,7 +111,7 @@ class TestGameConfig:
         assert get_game_by_key("invalid") is None
 
     def test_get_active_games(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/db")
+        monkeypatch.setenv("HOYO_API_URL", "https://hoyo-api.test")
         monkeypatch.setenv("NO_GENSHIN", "true")
         monkeypatch.setenv("NO_STARRAIL", "false")
         monkeypatch.setenv("NO_ZZZ", "false")

@@ -1,12 +1,12 @@
 import asyncio
 import logging
 import os
+import re
 import sys
 from dataclasses import dataclass
 from enum import Enum
 from re import sub
 
-import asyncpg
 import genshin
 import httpx
 from discord_webhook import DiscordEmbed, DiscordWebhook
@@ -27,8 +27,9 @@ class Settings(BaseSettings):
     MAX_PARALLEL: int = 5
     LOG_LEVEL: str = "INFO"
 
-    # Database
-    DATABASE_URL: str
+    # HoYo API
+    HOYO_API_URL: str
+    HOYO_API_KEY: str
 
     # Webhooks
     DISCORD_WEBHOOK_URL: str | None = None
@@ -42,13 +43,12 @@ class Settings(BaseSettings):
     NO_STARRAIL: bool = False
     NO_ZZZ: bool = False
 
-    @field_validator("DATABASE_URL")
+    @field_validator("HOYO_API_URL")
     @classmethod
-    def validate_database_url(cls, v: str) -> str:
-        if not v.startswith(("postgresql://", "postgres://")):
-            raise ValueError(
-                "DATABASE_URL must be a valid PostgreSQL connection string"
-            )
+    def validate_hoyo_api_url(cls, v: str) -> str:
+        v = v.strip().rstrip("/")
+        if not v.startswith(("http://", "https://")):
+            raise ValueError("HOYO_API_URL must start with http:// or https://")
         return v
 
     @field_validator("MAX_PARALLEL")
@@ -159,72 +159,73 @@ def fix_asyncio_windows_error() -> None:
 
 # --- Core Logic ---
 
-# Database connection pool
-_db_pool: asyncpg.Pool | None = None
 
+async def get_cookies_from_api() -> list[CookieInfo]:
+    """Fetch account cookies from hoyo-api.
 
-async def get_db_pool() -> asyncpg.Pool:
-    """Get or create database connection pool."""
-    global _db_pool
-    if _db_pool is None:
-        _db_pool = await asyncpg.create_pool(
-            dsn=settings.DATABASE_URL,
-            min_size=1,
-            max_size=5,
-            timeout=10.0,
-        )
-    return _db_pool
-
-
-async def close_db_pool() -> None:
-    """Close database connection pool."""
-    global _db_pool
-    if _db_pool:
-        await _db_pool.close()
-        _db_pool = None
-
-
-async def get_cookies_from_db() -> list[CookieInfo]:
-    """Fetch account cookies from PostgreSQL database.
-
-    Queries the Account table (Prisma schema) and formats cookies
-    for HoYoverse API authentication.
+    Calls `GET /api/internal/accounts` (shared-secret auth) and formats the
+    returned tokens for HoYoverse API authentication.
 
     Returns:
         List of CookieInfo objects with formatted cookie strings.
-        Empty list if DATABASE_URL not configured or query fails.
+        Empty list if the request fails or the payload is invalid.
     """
+    url = f"{settings.HOYO_API_URL.rstrip('/')}/api/internal/accounts"
     try:
-        pool = await get_db_pool()
-        async with pool.acquire() as conn:
-            rows = await conn.fetch(
-                'SELECT name, "accountId", "cookieToken" FROM "Account" ORDER BY name'
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                url, headers={"X-API-Key": settings.HOYO_API_KEY}
             )
+            response.raise_for_status()
+            payload = response.json()
+    except httpx.HTTPStatusError as e:
+        log.error(f"[COOKIE] hoyo-api request failed (HTTP {e.response.status_code}).")
+        return []
+    except httpx.HTTPError as e:
+        log.error(f"[COOKIE] Could not reach hoyo-api: {type(e).__name__}")
+        return []
+    except ValueError:
+        log.error("[COOKIE] hoyo-api returned invalid JSON.")
+        return []
 
-        cookies = []
-        for idx, row in enumerate(rows, 1):
-            name = row["name"]
-            account_id = row["accountId"]
-            cookie_token = row["cookieToken"]
-            safe_name = format_name(name)
-            env_name = f"ACC{idx}_{safe_name}"
+    rows = payload.get("accounts") if isinstance(payload, dict) else None
+    if not isinstance(rows, list):
+        log.error("[COOKIE] Unexpected hoyo-api response shape.")
+        return []
+
+    cookies = []
+    for idx, row in enumerate(rows, 1):
+        try:
+            name = row.get("name")
+            safe_name = format_name(str(name)) if name else ""
+            env_name = f"ACC{idx}_{safe_name}" if safe_name else f"ACC{idx}"
+
+            account_id = row.get("accountId")
+            cookie_token = row.get("cookieToken")
 
             if not account_id or not cookie_token:
                 log.warning(f"[COOKIE] Data tidak lengkap untuk akun {env_name}, skip.")
                 continue
 
+            # Validate to prevent cookie injection (dangerous characters).
+            account_id = str(account_id)
+            cookie_token = str(cookie_token)
+            if not re.fullmatch(r"[A-Za-z0-9_-]+", account_id) or not re.fullmatch(
+                r"[A-Za-z0-9_-]+", cookie_token
+            ):
+                log.warning(
+                    f"[COOKIE] Format cookie tidak valid untuk akun {env_name}, skip."
+                )
+                continue
+
             cookie_str = f"account_id_v2={account_id}; cookie_token_v2={cookie_token}"
             cookies.append(CookieInfo(env_name=env_name, cookies=cookie_str))
+        except Exception as e:
+            log.warning(f"[COOKIE] Gagal memproses row {idx}: {e}")
+            continue
 
-        log.info(f"[COOKIE] Berhasil memuat {len(cookies)} akun dari database.")
-        return cookies
-
-    except asyncpg.PostgresError as e:
-        log.error(f"[COOKIE] Database error: {e}")
-        return []
-    except Exception as e:
-        log.error(f"[COOKIE] Unexpected error: {e}")
-        return []
+    log.info(f"[COOKIE] Berhasil memuat {len(cookies)} akun dari hoyo-api.")
+    return cookies
 
 
 async def create_genshin_client(
