@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 import utils
-from utils import get_cookies_from_api
+from utils import get_cookies_from_api, is_safe_cookie_value
 
 
 class FakeResponse:
@@ -128,6 +128,34 @@ class TestGetCookiesFromApi:
 
         assert [c.env_name for c in cookies] == ["ACC3_GOOD"]
 
+    async def test_accepts_base64_and_encoded_tokens(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        configure(monkeypatch)
+        install_client(
+            monkeypatch,
+            FakeClient(
+                FakeResponse(
+                    {
+                        "accounts": [
+                            {
+                                "name": "Fadel",
+                                "accountId": "123456789",
+                                "cookieToken": "abc+/=def%2Fghi-jkl_mno",
+                            }
+                        ]
+                    }
+                )
+            ),
+        )
+
+        cookies = await get_cookies_from_api()
+
+        assert [c.env_name for c in cookies] == ["ACC1_FADEL"]
+        assert cookies[0].cookies == (
+            "account_id_v2=123456789; cookie_token_v2=abc+/=def%2Fghi-jkl_mno"
+        )
+
     async def test_http_error_returns_empty(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -151,3 +179,35 @@ class TestGetCookiesFromApi:
         install_client(monkeypatch, FakeClient(FakeResponse({"accounts": "nope"})))
 
         assert await get_cookies_from_api() == []
+
+
+class TestIsSafeCookieValue:
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "abc123",
+            "abc+/=def",
+            "abc%2Fdef",
+            "a.b~c!d*e'f(g)h",
+            "v2_abc-DEF.123",
+        ],
+    )
+    def test_accepts_rfc6265_values(self, value: str) -> None:
+        assert is_safe_cookie_value(value) is True
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            "",
+            "has space",
+            "semi;colon",
+            "comma,value",
+            'quote"value',
+            "back\\slash",
+            "tab\tvalue",
+            "newline\nvalue",
+            "unicode-\u00e9",
+        ],
+    )
+    def test_rejects_dangerous_values(self, value: str) -> None:
+        assert is_safe_cookie_value(value) is False

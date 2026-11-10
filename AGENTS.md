@@ -63,14 +63,14 @@ Copy `.env.example` to `.env` and configure:
 - **Account Source:** hoyo-api (`GET /api/internal/accounts` with `X-API-Key`)
 - **Validation:** Pydantic with field validators
 - **Code Quality:** `ruff` (linting/formatting), `mypy` (type checking)
-- **Testing:** `pytest` with `pytest-asyncio` and `pytest-cov` (43 tests, 84% coverage)
+- **Testing:** `pytest` with `pytest-asyncio` and `pytest-cov` (58 tests, 84% coverage)
 
 ### Account Source
 - Accounts fetched from `GET {HOYO_API_URL}/api/internal/accounts` using `httpx.AsyncClient`
 - Auth: `X-API-Key: HOYO_API_KEY` (must match hoyo-api's `SERVICE_API_KEY` secret)
 - **Response fields:** `name`, `accountId`, `cookieToken` (plaintext, decrypted by the API)
 - Cookies formatted as: `account_id_v2={accountId}; cookie_token_v2={cookieToken}` (v2 tokens)
-- Tokens are validated against `^[A-Za-z0-9_-]+$`; invalid/incomplete rows are skipped
+- Tokens are validated against RFC 6265 cookie-value rules (printable ASCII except `;`, `,`, whitespace, `"` and `\`); invalid/incomplete rows are skipped
 - **Note:** `genshin.complete_cookies()` deliberately not used (v1 endpoint rejects v2 tokens)
 
 ### Code Fetching
@@ -140,7 +140,7 @@ uv run pytest tests/test_utils.py -v
 ```
 
 ### Coverage
-- **Total:** 84% (43 tests, all passing)
+- **Total:** 84% (58 tests, all passing)
 - **Main modules:** `main.py` (52%), `utils.py` (81%)
 - **Test modules:** 100% (`test_api.py`, `test_main.py`, `test_utils.py`)
 - Uncovered: mostly error handling paths and notification I/O
