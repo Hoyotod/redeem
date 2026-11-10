@@ -44,14 +44,17 @@ jobs:
 
             - name: Run redeem script
               env:
-                  HOYO_API_URL: ${{ vars.HOYO_API_URL }}
+                  HOYO_API_URL: "${{ vars.HOYO_API_URL || 'https://hoyo-api.haiueom.workers.dev' }}"
                   HOYO_API_KEY: ${{ secrets.HOYO_API_KEY }}
                   DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-                  MAX_PARALLEL: ${{ vars.MAX_PARALLEL }}
-                  LOCALE: ${{ vars.LOCALE }}
-                  NO_GENSHIN: ${{ vars.NO_GENSHIN }}
-                  NO_STARRAIL: ${{ vars.NO_STARRAIL }}
-                  NO_ZZZ: ${{ vars.NO_ZZZ }}
+                  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+                  TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+                  MAX_PARALLEL: ${{ vars.MAX_PARALLEL || '5' }}
+                  LOCALE: ${{ vars.LOCALE || 'en-us' }}
+                  LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+                  NO_GENSHIN: ${{ vars.NO_GENSHIN || 'False' }}
+                  NO_STARRAIL: ${{ vars.NO_STARRAIL || 'False' }}
+                  NO_ZZZ: ${{ vars.NO_ZZZ || 'False' }}
                   MANUAL_ARGS: ${{ inputs.manual_args }}
               run: |
                   ARGS=""
