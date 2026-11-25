@@ -75,6 +75,7 @@ logging.basicConfig(
     datefmt="[%X]",
     handlers=[RichHandler(console=Console(), rich_tracebacks=True)],
 )
+logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("rich")
 console = Console()
 
